@@ -270,29 +270,33 @@ bot.on("document", async (msg) => {
         return;
     }
 
-    // ---- DEPLOY ----
-    if (session.mode === "deploy_file") {
-        if (!fileName.endsWith(".html")) return bot.sendMessage(chatId, "⚠️ File harus .html!");
+// ---- DEPLOY ----
+if (session.mode === "deploy_file") {
+    if (!fileName.endsWith(".html"))
+        return bot.sendMessage(chatId, "⚠️ File harus .html!");
 
-        const save = `./${fileName}`;
-        fs.writeFileSync(save, buffer);
+    const save = `./${fileName}`;
+    fs.writeFileSync(save, buffer);
 
-        userSessions[chatId] = { mode: "deploy_domain", file: save };
+    userSessions[chatId] = { mode: "deploy_domain", file: save };
 
-        return bot.sendMessage(chatId, "📝 Masukkan nama domain (tanpa .vercel.app)");
-    }
+    return bot.sendMessage(chatId, "📝 Masukkan nama domain (tanpa .vercel.app)");
+}
 });
 
 // ===========================
-// DOMAIN INPUT
+// DOMAIN INPUT (UPDATED)
 // ===========================
 bot.on("message", async (msg) => {
     const chatId = msg.chat.id;
     const session = userSessions[chatId];
 
+    // Bukan proses deploy → stop
     if (!session || session.mode !== "deploy_domain") return;
 
     const domain = msg.text.trim().toLowerCase();
+
+    // Validasi domain
     if (!/^[a-z0-9-]+$/.test(domain)) {
         return bot.sendMessage(chatId, "⚠️ Domain tidak valid!");
     }
@@ -300,45 +304,60 @@ bot.on("message", async (msg) => {
     bot.sendMessage(chatId, "🚀 Deploying ke Vercel...");
 
     try {
-        const html = fs.readFileSync(session.file, "utf8");
-        const base64 = Buffer.from(html).toString("base64");
+        // Ambil HTML asli
+        const htmlContent = fs.readFileSync(session.file, "utf8");
 
+        // Vercel API v2 (FORMAT BARU)
         await axios.post(
-    "https://api.vercel.com/v13/deployments",
-    {
-        name: domain,
-        files: [
+            "https://api.vercel.com/v2/deployments",
             {
-                file: "index.html",
-                data: base64
+                name: domain,
+                files: [
+                    {
+                        file: "index.html",
+                        data: htmlContent  // RAW HTML (bukan base64)
+                    }
+                ],
+                projectSettings: {
+                    framework: null // wajib null kalau static
+                }
+            },
+            {
+                headers: {
+                    Authorization: `Bearer ${VERCEL_TOKEN}`,
+                    "Content-Type": "application/json"
+                }
             }
-        ]
-    },
-    {
-        headers: {
-            Authorization: `Bearer ${VERCEL_TOKEN}`,
-            "Content-Type": "application/json"
-        }
-    }
-);
+        );
 
         const url = `https://${domain}.vercel.app`;
 
+        // Notifikasi user & owner
         bot.sendMessage(chatId, `✅ Deploy berhasil!\n🌐 ${url}`);
-        bot.sendMessage(OWNER_ID, `📢 User Deploy:\nID: ${chatId}\n🌐 ${url}`);
+        bot.sendMessage(
+            OWNER_ID,
+            `📢 User Deploy:\nID: ${chatId}\n🌐 ${url}`
+        );
 
+        // Update stats
         let st = getStats();
         st.deploy += 1;
         saveStats(st);
 
     } catch (err) {
-        bot.sendMessage(chatId, `❌ Error: ${err.message}`);
+        bot.sendMessage(
+            chatId,
+            `❌ Error:\n${err.response?.data ? JSON.stringify(err.response.data, null, 2) : err.message}`
+        );
     }
 
-    fs.unlinkSync(session.file);
+    // Hapus file setelah proses
+    try {
+        fs.unlinkSync(session.file);
+    } catch (e) {}
+
     delete userSessions[chatId];
 });
-
 // ===========================
 // /broadcast
 // ===========================
