@@ -57,19 +57,18 @@ function addUser(chatId) {
 // ===========================
 // STATS DATABASE
 // ===========================
-// CHANGED: use persistent volume path so stats.json survives redeploys.
-// You can override path with env STATS_DIR (e.g. set STATS_DIR=/mnt/data)
 const STATS_DIR = process.env.STATS_DIR || "/mnt/data";
 const STATS_FILE = `${STATS_DIR}/stats.json`;
 
-// ensure directory exists
 if (!fs.existsSync(STATS_DIR)) {
     fs.mkdirSync(STATS_DIR, { recursive: true });
 }
 
-// create file if missing
 if (!fs.existsSync(STATS_FILE)) {
-    fs.writeFileSync(STATS_FILE, JSON.stringify({ deploy: 0, encrypt: 0, decrypt: 0, startTime: Date.now() }));
+    fs.writeFileSync(
+        STATS_FILE,
+        JSON.stringify({ deploy: 0, encrypt: 0, decrypt: 0, startTime: Date.now() })
+    );
 }
 
 function getStats() {
@@ -79,10 +78,8 @@ function saveStats(data) {
     fs.writeFileSync(STATS_FILE, JSON.stringify(data));
 }
 
-// load stats tanpa mereset
 let stats = getStats();
 
-// kalau stats.json tidak punya startTime, buat sekali saja
 if (!stats.startTime) {
     stats.startTime = Date.now();
     saveStats(stats);
@@ -180,7 +177,7 @@ bot.on("callback_query", async (q) => {
     const chatId = q.message.chat.id;
 
     if (q.data === "open_deploy") {
-        userSessions[chatId] = { mode: "deploy_file" };
+        userSessions[chatId] = { mode: "deploy_wait_file" };
         return bot.sendMessage(chatId, "<b>🚀 Kirim file .html untuk deploy</b>", { parse_mode: "HTML" });
     }
 
@@ -203,7 +200,7 @@ bot.onText(/\/deploy/, async (msg) => {
 
     if (!(await requireJoin(chatId))) return;
 
-    userSessions[chatId] = { mode: "deploy_file" };
+    userSessions[chatId] = { mode: "deploy_wait_file" };
     bot.sendMessage(chatId, "🚀 Kirim file .html untuk deploy");
 });
 
@@ -218,10 +215,10 @@ bot.on("document", async (msg) => {
     if (!(await requireJoin(chatId))) return;
 
     const session = userSessions[chatId];
+    if (!session) return;
+
     const fileUrl = await bot.getFileLink(fileId);
     const buffer = (await axios.get(fileUrl, { responseType: "arraybuffer" })).data;
-
-    if (!session) return;
 
     // ---- ENCRYPT ----
     if (session.mode === "encrypt") {
@@ -270,24 +267,26 @@ bot.on("document", async (msg) => {
         return;
     }
 
-// ========== DEPLOY MODE ==========
-    if (session?.mode === "deploy_wait_file") {
+    // ---- DEPLOY (FIXED) ----
+    if (session.mode === "deploy_wait_file") {
         if (!fileName.endsWith(".html"))
             return bot.sendMessage(chatId, "⚠️ File harus .html");
 
-        const path = `./${fileName}`;
-        fs.writeFileSync(path, response.data);
+        const savePath = `./${Date.now()}_${fileName}`;
+        fs.writeFileSync(savePath, buffer);
 
         userSessions[chatId] = {
             mode: "deploy_wait_domain",
-            file: path
+            file: savePath
         };
 
         return bot.sendMessage(chatId, "📝 Masukkan domain (contoh: webkeren123)");
     }
 });
 
+// ===========================
 // DOMAIN HANDLER
+// ===========================
 bot.on("message", async (msg) => {
     const chatId = msg.chat.id;
     const session = userSessions[chatId];
@@ -327,6 +326,10 @@ bot.on("message", async (msg) => {
             { parse_mode: "HTML" }
         );
 
+        let st = getStats();
+        st.deploy += 1;
+        saveStats(st);
+
     } catch (e) {
         bot.sendMessage(chatId, `❌ Error: ${e.message}`);
     }
@@ -334,6 +337,7 @@ bot.on("message", async (msg) => {
     fs.unlinkSync(session.file);
     delete userSessions[chatId];
 });
+
 // ===========================
 // /broadcast
 // ===========================
@@ -353,7 +357,7 @@ bot.onText(/\/broadcast (.+)/, async (msg, match) => {
 });
 
 // ===========================
-// /stats (NEW)
+// /stats
 // ===========================
 bot.onText(/\/stats/, async (msg) => {
     if (msg.chat.id !== OWNER_ID) return;
