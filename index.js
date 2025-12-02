@@ -15,27 +15,23 @@ const VERCEL_TOKEN = process.env.VERCEL_TOKEN || "YPTMoA2jSbKQbb4s6YDGOk1s";
 const OWNER_ID = 6336062767;
 const CHANNEL_USERNAME = "@zamshtml";
 
-const URL = "https://" + (process.env.RAILWAY_PUBLIC_DOMAIN || ""); // auto domain Railway
+const URL = "https://" + (process.env.RAILWAY_PUBLIC_DOMAIN || ""); 
 const PORT = process.env.PORT || 3000;
 
 // ===========================
-// BOT INITIALIZATION (WEBHOOK MODE FOR RAILWAY)
+// BOT INITIALIZATION
 // ===========================
-
 let bot;
 
 if (process.env.RAILWAY_PUBLIC_DOMAIN) {
-    // Running on Railway → use webhook
     bot = new TelegramBot(BOT_TOKEN, { webHook: true });
     bot.setWebHook(`${URL}/bot${BOT_TOKEN}`);
     console.log("🚀 Bot running in WEBHOOK mode on Railway");
 } else {
-    // Running locally → use polling
     bot = new TelegramBot(BOT_TOKEN, { polling: true });
     console.log("🤖 Bot running in POLLING mode (local)");
 }
 
-// Handle webhook
 app.post(`/bot${BOT_TOKEN}`, (req, res) => {
     bot.processUpdate(req.body);
     res.sendStatus(200);
@@ -57,6 +53,26 @@ function addUser(chatId) {
         fs.writeFileSync(USERS_FILE, JSON.stringify(users));
     }
 }
+
+// ===========================
+// STATS DATABASE
+// ===========================
+const STATS_FILE = "./stats.json";
+if (!fs.existsSync(STATS_FILE)) {
+    fs.writeFileSync(STATS_FILE, JSON.stringify({ deploy: 0, encrypt: 0, decrypt: 0, startTime: Date.now() }));
+}
+
+function getStats() {
+    return JSON.parse(fs.readFileSync(STATS_FILE));
+}
+function saveStats(data) {
+    fs.writeFileSync(STATS_FILE, JSON.stringify(data));
+}
+
+// Inisialisasi uptime baru
+let startupStats = getStats();
+startupStats.startTime = Date.now();
+saveStats(startupStats);
 
 // ===========================
 // JOIN CHECK
@@ -114,9 +130,9 @@ bot.onText(/\/start/, async (msg) => {
 👋 Hai <b>@${username}</b>!
 
 <b>📌 Fitur:</b>
-🚀 Deploy Website ke Vercel  
-🔒 Encrypt File HTML  
-🔓 Decrypt File HTML  
+🚀 Deploy Website  
+🔒 Encrypt HTML  
+🔓 Decrypt HTML  
 📢 Broadcast (Owner)
 
 <b>Pilih menu di bawah 👇</b>
@@ -166,7 +182,7 @@ bot.on("callback_query", async (q) => {
 });
 
 // ===========================
-// COMMAND /deploy
+// /deploy COMMAND
 // ===========================
 bot.onText(/\/deploy/, async (msg) => {
     const chatId = msg.chat.id;
@@ -193,13 +209,12 @@ bot.on("document", async (msg) => {
 
     if (!session) return;
 
-    // -------- ENCRYPT --------
+    // ---- ENCRYPT ----
     if (session.mode === "encrypt") {
         if (!fileName.endsWith(".html")) return bot.sendMessage(chatId, "❌ File harus .html");
 
         const base = Buffer.from(buffer).toString("base64");
         const out = `encrypted_${Date.now()}.html`;
-
         const wrap = `
 <!DOCTYPE html>
 <html>
@@ -209,14 +224,18 @@ bot.on("document", async (msg) => {
 </html>`;
 
         fs.writeFileSync(out, wrap);
-
         await bot.sendDocument(chatId, out, { caption: "🔒 Enkripsi selesai" });
+
+        let st = getStats();
+        st.encrypt += 1;
+        saveStats(st);
+
         fs.unlinkSync(out);
         delete userSessions[chatId];
         return;
     }
 
-    // -------- DECRYPT --------
+    // ---- DECRYPT ----
     if (session.mode === "decrypt") {
         const text = buffer.toString();
         const match = text.match(/atob\("(.+)"\)/);
@@ -227,12 +246,17 @@ bot.on("document", async (msg) => {
 
         fs.writeFileSync(out, html);
         await bot.sendDocument(chatId, out, { caption: "🔓 Dekripsi selesai" });
+
+        let st = getStats();
+        st.decrypt += 1;
+        saveStats(st);
+
         fs.unlinkSync(out);
         delete userSessions[chatId];
         return;
     }
 
-    // -------- DEPLOY --------
+    // ---- DEPLOY ----
     if (session.mode === "deploy_file") {
         if (!fileName.endsWith(".html")) return bot.sendMessage(chatId, "⚠️ File harus .html!");
 
@@ -280,6 +304,10 @@ bot.on("message", async (msg) => {
         bot.sendMessage(chatId, `✅ Deploy berhasil!\n🌐 ${url}`);
         bot.sendMessage(OWNER_ID, `📢 User Deploy:\nID: ${chatId}\n🌐 ${url}`);
 
+        let st = getStats();
+        st.deploy += 1;
+        saveStats(st);
+
     } catch (err) {
         bot.sendMessage(chatId, `❌ Error: ${err.message}`);
     }
@@ -289,7 +317,7 @@ bot.on("message", async (msg) => {
 });
 
 // ===========================
-// BROADCAST
+// /broadcast
 // ===========================
 bot.onText(/\/broadcast (.+)/, async (msg, match) => {
     if (msg.chat.id !== OWNER_ID) return;
@@ -307,9 +335,39 @@ bot.onText(/\/broadcast (.+)/, async (msg, match) => {
 });
 
 // ===========================
+// /stats (NEW)
+// ===========================
+bot.onText(/\/stats/, async (msg) => {
+    if (msg.chat.id !== OWNER_ID) return;
+
+    const users = getAllUsers().length;
+    const st = getStats();
+
+    const uptimeMs = Date.now() - st.startTime;
+    const uptime = moment.utc(uptimeMs).format("HH:mm:ss");
+
+    return bot.sendMessage(
+        msg.chat.id,
+        `
+<b>📊 ZamsDeploy Bot — Statistics</b>
+━━━━━━━━━━━━━━━━━━
+👤 Total User: <b>${users}</b>
+
+🚀 Deploy: <b>${st.deploy}</b>
+🔒 Encrypt: <b>${st.encrypt}</b>
+🔓 Decrypt: <b>${st.decrypt}</b>
+
+⏳ Uptime: <b>${uptime}</b>
+🕒 Server Time: <b>${moment().format("YYYY-MM-DD HH:mm:ss")}</b>
+━━━━━━━━━━━━━━━━━━
+        `,
+        { parse_mode: "HTML" }
+    );
+});
+
+// ===========================
 // RAILWAY START
 // ===========================
-
 app.get("/", (req, res) => {
     res.send("ZamsDeploy Bot — Running on Railway");
 });
