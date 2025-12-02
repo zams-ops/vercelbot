@@ -69,10 +69,14 @@ function saveStats(data) {
     fs.writeFileSync(STATS_FILE, JSON.stringify(data));
 }
 
-// Inisialisasi uptime baru
-let startupStats = getStats();
-startupStats.startTime = Date.now();
-saveStats(startupStats);
+// load stats tanpa mereset
+let stats = getStats();
+
+// kalau stats.json tidak punya startTime, buat sekali saja
+if (!stats.startTime) {
+    stats.startTime = Date.now();
+    saveStats(stats);
+}
 
 // ===========================
 // JOIN CHECK
