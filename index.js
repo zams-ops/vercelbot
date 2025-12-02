@@ -5,7 +5,7 @@ const axios = require("axios");
 const moment = require("moment");
 
 const app = express();
-app.use(express.json()); 
+app.use(express.json());
 
 // ===========================
 // CONFIG RAILWAY & BOT
