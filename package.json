@@ -2,12 +2,10 @@
   "name": "vercelbot",
   "version": "1.0.0",
   "main": "index.js",
-  "type": "module",
   "scripts": {
     "start": "node index.js"
   },
   "dependencies": {
-    "node-fetch": "^3.3.2",
-    "telegraf": "^4.12.2"
+    "node-telegram-bot-api": "^0.61.0"
   }
 }
