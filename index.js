@@ -284,78 +284,51 @@ if (session.mode === "deploy_file") {
 }
 });
 
-// ===========================
-// DOMAIN INPUT (UPDATED)
-// ===========================
+// DOMAIN HANDLER
 bot.on("message", async (msg) => {
     const chatId = msg.chat.id;
     const session = userSessions[chatId];
 
-    // Bukan proses deploy → stop
-    if (!session || session.mode !== "deploy_domain") return;
+    if (!session || session.mode !== "deploy_wait_domain") return;
+    if (!msg.text || msg.text.startsWith("/")) return;
 
     const domain = msg.text.trim().toLowerCase();
 
-    // Validasi domain
     if (!/^[a-z0-9-]+$/.test(domain)) {
-        return bot.sendMessage(chatId, "⚠️ Domain tidak valid!");
+        return bot.sendMessage(chatId, "⚠️ Domain hanya boleh huruf, angka, dan '-'.");
     }
 
-    bot.sendMessage(chatId, "🚀 Deploying ke Vercel...");
+    bot.sendMessage(chatId, "🚀 Deploying...");
 
     try {
-        // Ambil HTML asli
-        const htmlContent = fs.readFileSync(session.file, "utf8");
+        const html = fs.readFileSync(session.file, "utf-8");
+        const base64 = Buffer.from(html).toString("base64");
 
-        // Vercel API v2 (FORMAT BARU)
         await axios.post(
-            "https://api.vercel.com/v2/deployments",
+            "https://api.vercel.com/v13/deployments?skipAutoDetectionConfirmation=1",
             {
                 name: domain,
-                files: [
-                    {
-                        file: "index.html",
-                        data: htmlContent  // RAW HTML (bukan base64)
-                    }
-                ],
-                projectSettings: {
-                    framework: null // wajib null kalau static
-                }
+                files: [{ file: "index.html", data: base64, encoding: "base64" }],
+                target: "production"
             },
-            {
-                headers: {
-                    Authorization: `Bearer ${VERCEL_TOKEN}`,
-                    "Content-Type": "application/json"
-                }
-            }
+            { headers: { Authorization: `Bearer ${VERCEL_TOKEN}` } }
         );
 
-        const url = `https://${domain}.vercel.app`;
+        const link = `https://${domain}.vercel.app`;
 
-        // Notifikasi user & owner
-        bot.sendMessage(chatId, `✅ Deploy berhasil!\n🌐 ${url}`);
+        bot.sendMessage(chatId, `✅ Deploy Sukses!\n🌐 ${link}`);
+
         bot.sendMessage(
             OWNER_ID,
-            `📢 User Deploy:\nID: ${chatId}\n🌐 ${url}`
+            `📢 Deploy Baru!\nUser: <code>${chatId}</code>\n🌐 ${link}`,
+            { parse_mode: "HTML" }
         );
 
-        // Update stats
-        let st = getStats();
-        st.deploy += 1;
-        saveStats(st);
-
-    } catch (err) {
-        bot.sendMessage(
-            chatId,
-            `❌ Error:\n${err.response?.data ? JSON.stringify(err.response.data, null, 2) : err.message}`
-        );
+    } catch (e) {
+        bot.sendMessage(chatId, `❌ Error: ${e.message}`);
     }
 
-    // Hapus file setelah proses
-    try {
-        fs.unlinkSync(session.file);
-    } catch (e) {}
-
+    fs.unlinkSync(session.file);
     delete userSessions[chatId];
 });
 // ===========================
