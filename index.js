@@ -19,7 +19,7 @@ const URL = "https://" + (process.env.RAILWAY_PUBLIC_DOMAIN || "");
 const PORT = process.env.PORT || 3000;
 
 // ===========================
-// BOT INITIALIZATION
+// BOT INITIALIZATION (WEBHOOK MODE FOR RAILWAY)
 // ===========================
 let bot;
 
@@ -57,7 +57,17 @@ function addUser(chatId) {
 // ===========================
 // STATS DATABASE
 // ===========================
-const STATS_FILE = "./stats.json";
+// CHANGED: use persistent volume path so stats.json survives redeploys.
+// You can override path with env STATS_DIR (e.g. set STATS_DIR=/mnt/data)
+const STATS_DIR = process.env.STATS_DIR || "/mnt/data";
+const STATS_FILE = `${STATS_DIR}/stats.json`;
+
+// ensure directory exists
+if (!fs.existsSync(STATS_DIR)) {
+    fs.mkdirSync(STATS_DIR, { recursive: true });
+}
+
+// create file if missing
 if (!fs.existsSync(STATS_FILE)) {
     fs.writeFileSync(STATS_FILE, JSON.stringify({ deploy: 0, encrypt: 0, decrypt: 0, startTime: Date.now() }));
 }
