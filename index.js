@@ -304,14 +304,23 @@ bot.on("message", async (msg) => {
         const base64 = Buffer.from(html).toString("base64");
 
         await axios.post(
-            "https://api.vercel.com/v13/deployments",
+    "https://api.vercel.com/v13/deployments",
+    {
+        name: domain,
+        files: [
             {
-                name: domain,
-                files: [{ file: "index.html", data: base64, encoding: "base64" }],
-                target: "production"
-            },
-            { headers: { Authorization: `Bearer ${VERCEL_TOKEN}` } }
-        );
+                file: "index.html",
+                data: base64
+            }
+        ]
+    },
+    {
+        headers: {
+            Authorization: `Bearer ${VERCEL_TOKEN}`,
+            "Content-Type": "application/json"
+        }
+    }
+);
 
         const url = `https://${domain}.vercel.app`;
 
