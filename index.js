@@ -270,18 +270,21 @@ bot.on("document", async (msg) => {
         return;
     }
 
-// ---- DEPLOY ----
-if (session.mode === "deploy_file") {
-    if (!fileName.endsWith(".html"))
-        return bot.sendMessage(chatId, "⚠️ File harus .html!");
+// ========== DEPLOY MODE ==========
+    if (session?.mode === "deploy_wait_file") {
+        if (!fileName.endsWith(".html"))
+            return bot.sendMessage(chatId, "⚠️ File harus .html");
 
-    const save = `./${fileName}`;
-    fs.writeFileSync(save, buffer);
+        const path = `./${fileName}`;
+        fs.writeFileSync(path, response.data);
 
-    userSessions[chatId] = { mode: "deploy_domain", file: save };
+        userSessions[chatId] = {
+            mode: "deploy_wait_domain",
+            file: path
+        };
 
-    return bot.sendMessage(chatId, "📝 Masukkan nama domain (tanpa .vercel.app)");
-}
+        return bot.sendMessage(chatId, "📝 Masukkan domain (contoh: webkeren123)");
+    }
 });
 
 // DOMAIN HANDLER
