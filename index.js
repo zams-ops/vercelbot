@@ -125,7 +125,7 @@ bot.onText(/\/start/, async (msg) => {
     bot.sendMessage(
         chatId,
         `
-<b>💠 ZamsDeploy Bot — Railway Ready</b>
+<b>💠 ZamsDeploy Bot </b>
 ━━━━━━━━━━━━━━━━━━
 👋 Hai <b>@${username}</b>!
 
